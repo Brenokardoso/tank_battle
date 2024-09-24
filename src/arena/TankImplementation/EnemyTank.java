@@ -14,60 +14,93 @@ public class EnemyTank extends Tank {
 		super(sprite, arena);
 	}
 
-	int state = 0;
 	float anguloAtual = retornaAnguloCanhao();
-	boolean atirar;
-	int linha;
-	int coluna;
 	BlocoCenario atualPosition = retornaPosicaoAtual();
+	boolean state;
+
+	boolean initState() {
+		if (state == false) {
+			atualizaMovimento();
+			atualizaTempos();
+			atualizaAtingido();
+			atualizaEscudo();
+			state = true;
+		}
+		return state;
+	}
 
 	public void myDeathTank() {
 		BlocoCenario meuBloco = retornaPosicaoAtual();
 		BlocoCenario blocoInimigo = retornaBlocoTankInimigo();
 
-		// Se tiver power-up, prioriza pegar
-		if (temPowerUp()) {
-			movePara(retornaBlocoPowerUP());
+		if (distanciaRelativa(meuBloco, blocoInimigo) <= 6) {
+			if (!temParedeEntre(blocoInimigo)) {
+				if (qtdTiros > 0) {
+					rotacionaCanhao(calculaAnguloParaBloco(blocoInimigo));
+					atirar();
+
+				} else {
+					if (temPowerUp() == true) {
+						movePara(retornaBlocoPowerUP());
+
+					}
+				}
+			}
+		} else {
+			if (temPowerUp() == true) {
+				if (temEscudo() == true) {
+					movePara(retornaBlocoPowerUP());
+					iniciaEscudo();
+
+				}
+				pararMovimento();
+				movePara(retornaBlocoPowerUP());
+
+			}
+			if (qtdTiros > 0) {
+				movePara(posicaoLivreParaAtirar());
+
+			} else {
+				movePara(escolheDestinoFuga(blocoInimigo));
+			}
+
 		}
 
-		// Se o inimigo estiver perto e você não tem escudo, fuja
-		else if (distanciaRelativa(meuBloco, blocoInimigo) < 3 && !temEscudo()) {
-			BlocoCenario destinoFuga = escolheDestinoFuga(blocoInimigo);
-			if (destinoFuga != null) {
-				movePara(destinoFuga);
+	}
+
+	private boolean temParedeEntre(BlocoCenario blocoInimigo) {
+		BlocoCenario posicaoAtual = retornaPosicaoAtual();
+		int linhaAtual = posicaoAtual.linha;
+		int colunaAtual = posicaoAtual.coluna;
+		int linhaInimigo = blocoInimigo.linha;
+		int colunaInimigo = blocoInimigo.coluna;
+
+		// Verifica ao longo da linha reta se há parede entre o tanque e o inimigo
+		while (linhaAtual != linhaInimigo || colunaAtual != colunaInimigo) {
+			if (temParede(linhaAtual, colunaAtual)) {
+				return true; // Há uma parede no caminho
+			}
+			if (linhaAtual < linhaInimigo)
+				linhaAtual++;
+			else if (linhaAtual > linhaInimigo)
+				linhaAtual--;
+
+			if (colunaAtual < colunaInimigo)
+				colunaAtual++;
+			else if (colunaAtual > colunaInimigo)
+				colunaAtual--;
+		}
+		return false; // Nenhuma parede no caminho
+	}
+
+	// Método para encontrar uma posição livre onde o tanque possa atirar
+	private BlocoCenario posicaoLivreParaAtirar() {
+		for (BlocoCenario vizinho : getVizinhos(retornaPosicaoAtual())) {
+			if (!temParedeEntre(vizinho)) {
+				return vizinho;
 			}
 		}
-
-		// Caso sem tiros ou sem escudo, ativa escudo
-		else if (qtdTiros == 0 || !temEscudo()) {
-			iniciaEscudo();
-		}
-
-		// Verifica se não tem parede e atira no inimigo
-		if (blocoInimigo != null && atualPosition != null) {
-			int linhaAtual = atualPosition.linha;
-			int colunaAtual = atualPosition.coluna;
-
-			if (!temParede(linhaAtual, colunaAtual)) {
-				rotacionaCanhao(calculaAnguloParaBloco(blocoInimigo));
-				atirar();
-			}
-		}
-
-		// Verifica distância do inimigo e atira
-		else if (distanciaRelativa(meuBloco, blocoInimigo) >= 3 && qtdTiros > 0) {
-			rotacionaCanhao(calculaAnguloParaBloco(blocoInimigo));
-			atirar();
-		}
-
-		// Condição adicional para atirar se o inimigo estiver perto
-		else if (distanciaRelativa(meuBloco, blocoInimigo) < 3 && qtdTiros > 0) {
-			rotacionaCanhao(calculaAnguloParaBloco(blocoInimigo));
-			atirar();
-		}
-
-		atualizaMovimento();
-		atualizaEscudo();
+		return retornaPosicaoAtual(); // Se não encontrar, mantém a posição atual
 	}
 
 	// Calcula a distância relativa entre dois blocos

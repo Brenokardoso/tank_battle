@@ -40,63 +40,137 @@ public class MyTank extends Tank {
 		super(sprite, arena);
 	}
 
-	int state = 0;
 	float anguloAtual = retornaAnguloCanhao();
-	boolean atirar;
-	int linha;
-	int coluna;
 	BlocoCenario atualPosition = retornaPosicaoAtual();
+	boolean state;
+
+	boolean initState() {
+		if (state == false) {
+			atualizaMovimento();
+			atualizaTempos();
+			atualizaAtingido();
+			atualizaEscudo();
+			state = true;
+		}
+		return state;
+	}
 
 	public void myDeathTank() {
 		BlocoCenario meuBloco = retornaPosicaoAtual();
 		BlocoCenario blocoInimigo = retornaBlocoTankInimigo();
 
-		// Se tiver power-up, prioriza pegar
-		if (temPowerUp()) {
-			movePara(retornaBlocoPowerUP());
-		}
-
-		// Se o inimigo estiver perto e você não tem escudo, fuja
-		else if (distanciaRelativa(meuBloco, blocoInimigo) < 3 && !temEscudo()) {
-			BlocoCenario destinoFuga = escolheDestinoFuga(blocoInimigo);
-			if (destinoFuga != null) {
-				movePara(destinoFuga);
+		if (distanciaRelativa(meuBloco, blocoInimigo) <= 8) {
+			moveParaAfastamento(blocoInimigo);
+			if (!temParedeEntre(blocoInimigo)) {
+				if (qtdTiros > 0) {
+					rotacionaCanhao(calculaAnguloParaBloco(blocoInimigo));
+					movePara(posicaoLivreParaAtirar());
+					atirar();
+					System.out.println("Atirar");
+				}
+				if (qtdTiros <= 0) {
+					if (temPowerUp() == true) {
+						movePara(retornaBlocoPowerUP());
+						if (temEscudo()) {
+							atualizaEscudo();
+							iniciaEscudo();
+							System.out.println("Shield");
+						}
+					} else {
+						moveParaAfastamento(escolheDestinoFuga(blocoInimigo));
+					}
+				}
+			}
+		} else {
+			System.out.println("Aproxima");
+			moveParaAproximacao(blocoInimigo);
+			if (meuBloco == blocoInimigo) {
+				moveParaAfastamento(blocoInimigo);
 			}
 		}
 
-		// Caso sem tiros ou sem escudo, ativa escudo
-		else if (qtdTiros == 0 || !temEscudo()) {
-			iniciaEscudo();
+	}
+
+	private double distanciaEntreBlocos(BlocoCenario bloco1, BlocoCenario bloco2) {
+		return Math.abs(bloco1.linha - bloco2.linha) + Math.abs(bloco1.coluna - bloco2.coluna);
+	}
+
+	// Método para mover o tanque em direção ao inimigo (aproximação)
+	private void moveParaAproximacao(BlocoCenario blocoInimigo) {
+		// Tenta se mover em direção ao inimigo se não houver parede no caminho
+		if (!temParedeEntre(blocoInimigo)) {
+			movePara(blocoInimigo);
+		} else {
+			// Caso tenha parede, tenta encontrar o melhor caminho evitando paredes
+			movePara(posicaoLivreAproximacao(blocoInimigo));
 		}
+	}
 
-		// Verifica se não tem parede e atira no inimigo
-		if (blocoInimigo != null && atualPosition != null) {
-			int linhaAtual = atualPosition.linha;
-			int colunaAtual = atualPosition.coluna;
+	// Método para mover o tanque se afastando do inimigo (afastamento)
 
-			if (!temParede(linhaAtual, colunaAtual)) {
-				rotacionaCanhao(calculaAnguloParaBloco(blocoInimigo));
-				atirar();
+	private void moveParaAfastamento(BlocoCenario blocoInimigo) {
+		// Encontra um bloco afastado do inimigo e tenta mover para lá
+		BlocoCenario blocoAfastado = posicaoLivreAfastamento(blocoInimigo);
+		movePara(blocoAfastado);
+	}
+
+	// Método que encontra uma posição próxima ao inimigo evitando paredes
+	// (aproximação)
+
+	private BlocoCenario posicaoLivreAproximacao(BlocoCenario blocoInimigo) {
+		for (BlocoCenario vizinho : getVizinhos(retornaPosicaoAtual())) {
+			if (!temParedeEntre(vizinho) && distanciaEntreBlocos(vizinho,
+					blocoInimigo) < distanciaEntreBlocos(retornaPosicaoAtual(), blocoInimigo)) {
+				return vizinho;
 			}
 		}
+		return retornaPosicaoAtual(); // Se não encontrar, mantém a posição atual
+	}
 
-		// Verifica distância do inimigo e atira
-		else if (distanciaRelativa(meuBloco, blocoInimigo) >= 3 && qtdTiros > 0) {
-			rotacionaCanhao(calculaAnguloParaBloco(blocoInimigo));
-			atirar();
-		}
-
-		// Condição adicional para atirar se o inimigo estiver perto
-		else if (distanciaRelativa(meuBloco, blocoInimigo) < 3 && qtdTiros > 0) {
-			rotacionaCanhao(calculaAnguloParaBloco(blocoInimigo));
-			if (temParede(meuBloco.linha, meuBloco.coluna) || temParede(meuBloco.linha, meuBloco.coluna)){
-
+	// Método que encontra uma posição afastada do inimigo evitando paredes
+	// (afastamento)
+	private BlocoCenario posicaoLivreAfastamento(BlocoCenario blocoInimigo) {
+		for (BlocoCenario vizinho : getVizinhos(retornaPosicaoAtual())) {
+			if (!temParedeEntre(vizinho) && distanciaEntreBlocos(vizinho,
+					blocoInimigo) > distanciaEntreBlocos(retornaPosicaoAtual(), blocoInimigo)) {
+				return vizinho;
 			}
-			atirar();
 		}
+		return retornaPosicaoAtual(); // Se não encontrar, mantém a posição atual
+	}
 
-		atualizaMovimento();
-		atualizaEscudo();
+	private boolean temParedeEntre(BlocoCenario blocoInimigo) {
+		BlocoCenario posicaoAtual = retornaPosicaoAtual();
+		int linhaAtual = posicaoAtual.linha;
+		int colunaAtual = posicaoAtual.coluna;
+		int linhaInimigo = blocoInimigo.linha;
+		int colunaInimigo = blocoInimigo.coluna;
+
+		while (linhaAtual != linhaInimigo || colunaAtual != colunaInimigo) {
+			if (temParede(linhaAtual, colunaAtual)) {
+				return true;
+			}
+			if (linhaAtual < linhaInimigo)
+				linhaAtual++;
+			else if (linhaAtual > linhaInimigo)
+				linhaAtual--;
+
+			if (colunaAtual < colunaInimigo)
+				colunaAtual++;
+			else if (colunaAtual > colunaInimigo)
+				colunaAtual--;
+		}
+		return false;
+	}
+
+	// Método para encontrar uma posição livre onde o tanque possa atirar
+	private BlocoCenario posicaoLivreParaAtirar() {
+		for (BlocoCenario vizinho : getVizinhos(retornaPosicaoAtual())) {
+			if (!temParedeEntre(vizinho)) {
+				return vizinho;
+			}
+		}
+		return retornaPosicaoAtual(); // Se não encontrar, mantém a posição atual
 	}
 
 	// Calcula a distância relativa entre dois blocos
@@ -166,6 +240,7 @@ public class MyTank extends Tank {
 
 	@Override
 	public void executa() {
+		initState();
 		myDeathTank();
 	}
 
